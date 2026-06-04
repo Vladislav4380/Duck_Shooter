@@ -1,0 +1,19 @@
+<div class="app">
+  <app-start-screen 
+    *ngIf="currentScreen === 'start'"
+    (startGame)="onStartGame()">
+  </app-start-screen>
+
+  <app-game-screen 
+    *ngIf="currentScreen === 'game'"
+    (gameEnd)="onGameEnd()">
+  </app-game-screen>
+
+  <app-result-screen 
+    *ngIf="currentScreen === 'result'"
+    [finalScore]="gameState?.score || 0"
+    [hits]="gameState?.hits || 0"
+    [misses]="gameState?.misses || 0"
+    (playAgain)="onPlayAgain()">
+  </app-result-screen>
+</div>

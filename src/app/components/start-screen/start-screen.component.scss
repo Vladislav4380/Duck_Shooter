@@ -1,0 +1,192 @@
+.start-screen {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Arial', sans-serif;
+  overflow: hidden;
+  position: relative;
+
+  .bg-image {
+    position: absolute;
+    inset: 0;
+    background: url('/assets/bg_start.png') center center / cover no-repeat;
+    z-index: 0;
+  }
+
+  .bg-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 1;
+  }
+
+  .container {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 420px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .title-block {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 14px;
+
+    .title-duck {
+      font-size: 44px;
+      animation: duckBob 1.8s ease-in-out infinite;
+
+      &:last-child {
+        animation-delay: 0.9s;
+        transform: scaleX(-1);
+        display: inline-block;
+      }
+    }
+
+    .title {
+      font-size: 36px;
+      font-weight: 900;
+      margin: 0;
+      color: #FFF;
+      text-shadow: 3px 3px 0 #333, 0 0 20px rgba(255, 200, 0, 0.8);
+      font-family: 'Arial Black', Arial, sans-serif;
+      letter-spacing: 1px;
+      animation: titlePulse 2s ease-in-out infinite;
+    }
+  }
+
+  .language-selector {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 16px;
+
+    .lang-btn {
+      padding: 8px 18px;
+      border: 2px solid rgba(255,255,255,0.6);
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(4px);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #FFF;
+      font-weight: bold;
+      transition: all 0.25s ease;
+
+      &:hover { transform: scale(1.06); background: rgba(255,255,255,0.35); }
+
+      &.active {
+        background: #FFD700;
+        border-color: #FFA500;
+        color: #333;
+        box-shadow: 0 3px 12px rgba(255, 215, 0, 0.6);
+      }
+    }
+  }
+
+  .card {
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 22px;
+    padding: 24px 22px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(6px);
+
+    .best-score {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #FFD700, #FFA500);
+      border-radius: 14px;
+      padding: 12px 18px;
+      margin-bottom: 18px;
+      border: 2px solid #FF8C00;
+      box-shadow: 0 4px 12px rgba(255, 165, 0, 0.4);
+
+      .trophy { font-size: 26px; }
+      .label { font-size: 16px; font-weight: bold; color: #333; }
+      .score-value { font-size: 30px; font-weight: 900; color: #CC0000; min-width: 50px; text-align: right; }
+    }
+
+    .rules-box {
+      background: linear-gradient(135deg, #FFF9E6, #FFF0CC);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 20px;
+      border: 2px solid #FFD700;
+
+      h2 {
+        margin: 0 0 12px 0;
+        font-size: 18px;
+        color: #333;
+        font-weight: 900;
+      }
+
+      .rules-list {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+
+        .rule-item {
+          background: rgba(255,255,255,0.7);
+          border-radius: 10px;
+          padding: 8px 10px;
+          font-size: 14px;
+          font-weight: bold;
+          color: #444;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+
+          .duck-icon { font-size: 18px; }
+        }
+      }
+    }
+
+    .start-btn {
+      width: 100%;
+      padding: 18px;
+      font-size: 22px;
+      font-weight: 900;
+      color: white;
+      background: linear-gradient(135deg, #FF4500, #FF6B00);
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: 0 6px 20px rgba(255, 69, 0, 0.5);
+      letter-spacing: 1px;
+      font-family: 'Arial Black', Arial, sans-serif;
+
+      &:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 28px rgba(255, 69, 0, 0.7);
+      }
+      &:active { transform: translateY(0); }
+    }
+  }
+}
+
+@keyframes duckBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes titlePulse {
+  0%, 100% { text-shadow: 3px 3px 0 #333, 0 0 20px rgba(255,200,0,0.8); }
+  50% { text-shadow: 3px 3px 0 #333, 0 0 35px rgba(255,200,0,1); }
+}
+
+@media (max-width: 480px) {
+  .start-screen {
+    .title-block .title { font-size: 28px; }
+    .card { padding: 18px 16px; }
+    .card .start-btn { font-size: 18px; padding: 14px; }
+  }
+}

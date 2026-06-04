@@ -1,0 +1,12 @@
+<div class="game-wrapper">
+  <canvas
+    #gameCanvas
+    class="game-canvas"
+    (click)="onCanvasClick($event)"
+    (touchstart)="onCanvasClick($event)">
+  </canvas>
+
+  <div class="game-over-overlay" *ngIf="gameState?.gameOver">
+    <div class="game-over-text">{{ translate('gameOver') }}</div>
+  </div>
+</div>

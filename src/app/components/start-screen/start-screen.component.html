@@ -1,0 +1,56 @@
+<div class="start-screen">
+  <!-- Background image -->
+  <div class="bg-image"></div>
+  <div class="bg-overlay"></div>
+
+  <div class="container">
+    <!-- Title -->
+    <div class="title-block">
+      <div class="title-duck">🦆</div>
+      <h1 class="title">{{ translate('title') }}</h1>
+      <div class="title-duck">🦆</div>
+    </div>
+
+    <!-- Language selector -->
+    <div class="language-selector">
+      <button
+        [class.active]="currentLanguage === 'uk'"
+        (click)="changeLanguage('uk')"
+        class="lang-btn">
+        🇺🇦 Українська
+      </button>
+      <button
+        [class.active]="currentLanguage === 'en'"
+        (click)="changeLanguage('en')"
+        class="lang-btn">
+        🇬🇧 English
+      </button>
+    </div>
+
+    <!-- Card -->
+    <div class="card">
+      <!-- Best score -->
+      <div class="best-score">
+        <span class="trophy">🏆</span>
+        <span class="label">{{ translate('bestScore') }}:</span>
+        <span class="score-value">{{ bestScore }}</span>
+      </div>
+
+      <!-- Rules -->
+      <div class="rules-box">
+        <h2>{{ translate('rules') }}</h2>
+        <div class="rules-list">
+          <div class="rule-item"><span class="duck-icon">🦆</span> +10 {{ translate('pts') }}</div>
+          <div class="rule-item"><span class="duck-icon">💙🦆</span> +25 {{ translate('pts') }}</div>
+          <div class="rule-item"><span class="duck-icon">⭐🦆</span> +50 {{ translate('pts') }}</div>
+          <div class="rule-item"><span class="duck-icon">⏱</span> 60 {{ translate('seconds') }}</div>
+        </div>
+      </div>
+
+      <!-- Start button -->
+      <button class="start-btn" (click)="onStartGame()">
+        🎯 {{ translate('startGame') }}
+      </button>
+    </div>
+  </div>
+</div>

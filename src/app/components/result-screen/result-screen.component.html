@@ -1,0 +1,48 @@
+<div class="result-screen">
+  <div class="container">
+    <div class="header">
+      <h1 class="title">{{ translate('gameOver') }}</h1>
+      <div class="record-badge" *ngIf="isNewRecord">
+        🏆 NEW RECORD!
+      </div>
+    </div>
+
+    <div class="results-box">
+      <div class="result-item">
+        <span class="label">{{ translate('finalScore') }}:</span>
+        <span class="value">{{ finalScore }}</span>
+      </div>
+      <div class="result-item">
+        <span class="label">{{ translate('hits') }}:</span>
+        <span class="value">{{ hits }}</span>
+      </div>
+      <div class="result-item">
+        <span class="label">{{ translate('misses') }}:</span>
+        <span class="value">{{ misses }}</span>
+      </div>
+      <div class="result-item">
+        <span class="label">{{ translate('accuracy') }}:</span>
+        <span class="value">{{ accuracy }}%</span>
+      </div>
+      <div class="result-item">
+        <span class="label">{{ translate('bestScore') }}:</span>
+        <span class="value" [class.record]="finalScore === bestScore">{{ bestScore }}</span>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button class="btn btn-primary" (click)="onPlayAgain()">
+        {{ translate('playAgain') }}
+      </button>
+      <button class="btn btn-secondary" (click)="onShare()">
+        {{ translate('share') }}
+      </button>
+    </div>
+
+    <div class="decorative">
+      <span class="emoji">🦆</span>
+      <span class="emoji">🎯</span>
+      <span class="emoji">🦆</span>
+    </div>
+  </div>
+</div>
