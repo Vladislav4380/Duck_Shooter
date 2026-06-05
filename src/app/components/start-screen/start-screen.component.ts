@@ -1,6 +1,7 @@
 import { Component, Output, EventEmitter, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LanguageService, Language } from '../../services/language.service';
+import { TelegramService } from '../../services/telegram.service';
 
 @Component({
   selector: 'app-start-screen',
@@ -16,7 +17,10 @@ export class StartScreenComponent implements OnInit {
   currentLanguage: Language = 'en';
   bestScore: number = 0;
 
-  constructor(private languageService: LanguageService) {}
+  constructor(
+    private languageService: LanguageService,
+    private telegramService: TelegramService
+  ) {}
 
   ngOnInit(): void {
     this.currentLanguage = this.languageService.getLanguage();
@@ -29,6 +33,10 @@ export class StartScreenComponent implements OnInit {
 
   onStartGame(): void {
     this.startGame.emit();
+  }
+
+  onShareGame(): void {
+    this.telegramService.shareGame(this.translate('shareInviteText'));
   }
 
   changeLanguage(lang: Language): void {

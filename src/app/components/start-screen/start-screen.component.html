@@ -6,9 +6,13 @@
   <div class="container">
     <!-- Title -->
     <div class="title-block">
-      <div class="title-duck">🦆</div>
+      <div class="title-duck">
+        <img src="assets/duck_normal.png" alt="" aria-hidden="true">
+      </div>
       <h1 class="title">{{ translate('title') }}</h1>
-      <div class="title-duck">🦆</div>
+      <div class="title-duck">
+        <img src="assets/duck_normal.png" alt="" aria-hidden="true">
+      </div>
     </div>
 
     <!-- Language selector -->
@@ -40,17 +44,39 @@
       <div class="rules-box">
         <h2>{{ translate('rules') }}</h2>
         <div class="rules-list">
-          <div class="rule-item"><span class="duck-icon">🦆</span> +10 {{ translate('pts') }}</div>
-          <div class="rule-item"><span class="duck-icon">💙🦆</span> +25 {{ translate('pts') }}</div>
-          <div class="rule-item"><span class="duck-icon">⭐🦆</span> +50 {{ translate('pts') }}</div>
-          <div class="rule-item"><span class="duck-icon">⏱</span> 60 {{ translate('seconds') }}</div>
+          <div class="rule-item">
+            <img class="rule-icon rule-duck" src="assets/duck_normal.png" alt="" aria-hidden="true">
+            {{ translate('normalRule') }}
+          </div>
+          <div class="rule-item">
+            <img class="rule-icon rule-duck" src="assets/duck_fast.png" alt="" aria-hidden="true">
+            {{ translate('fastRule') }}
+          </div>
+          <div class="rule-item">
+            <img class="rule-icon rule-duck" src="assets/duck_golden.png" alt="" aria-hidden="true">
+            {{ translate('goldenRule') }}
+          </div>
+          <div class="rule-item">
+            <img class="rule-icon" src="assets/crosshair.png" alt="" aria-hidden="true">
+            {{ translate('smallRule') }}
+          </div>
+          <div class="rule-item">
+            <img class="rule-icon" src="assets/timer_icon.png" alt="" aria-hidden="true">
+            60 {{ translate('seconds') }}
+          </div>
         </div>
       </div>
 
       <!-- Start button -->
-      <button class="start-btn" (click)="onStartGame()">
+      <div class="action-buttons">
+        <button class="start-btn" (click)="onStartGame()">
         🎯 {{ translate('startGame') }}
-      </button>
+        </button>
+        <button class="share-btn" (click)="onShareGame()">
+          <img src="assets/duck_normal.png" alt="" aria-hidden="true">
+          {{ translate('shareGame') }}
+        </button>
+      </div>
     </div>
   </div>
 </div>

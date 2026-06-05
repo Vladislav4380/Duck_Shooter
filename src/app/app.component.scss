@@ -1,8 +1,67 @@
 .app {
   width: 100%;
-  height: 100vh;
+  height: 100dvh;
   margin: 0;
   padding: 0;
   overflow: hidden;
   font-family: 'Arial', sans-serif;
+}
+
+.landscape-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  color: #ffffff;
+  background:
+    linear-gradient(rgba(28, 72, 96, 0.68), rgba(23, 92, 63, 0.72)),
+    url('/assets/bg_start.png') center center / cover no-repeat;
+
+  .landscape-duck {
+    width: min(34vw, 118px);
+    max-height: 30dvh;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.35));
+  }
+
+  .phone-turn {
+    width: 84px;
+    height: 52px;
+    border: 5px solid #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.15);
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ffffff;
+      transform: translateY(-50%);
+    }
+  }
+
+  h2 {
+    margin: 0;
+    font-size: clamp(22px, 7vw, 34px);
+    line-height: 1.08;
+    text-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  }
+
+  p {
+    margin: 0;
+    font-size: clamp(15px, 4.5vw, 20px);
+    line-height: 1.25;
+    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  }
 }

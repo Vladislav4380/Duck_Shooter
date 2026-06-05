@@ -22,6 +22,9 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
   private sub!: Subscription;
   private ctx!: CanvasRenderingContext2D;
   private renderFrameId: number | null = null;
+  private resizeHandler = () => this.resizeCanvas();
+  private gameEndTimeoutId: number | null = null;
+  private gameEndEmitted = false;
 
   // Loaded images
   private bgImg = new Image();
@@ -29,9 +32,18 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
   private hitImg = new Image();
   private imagesLoaded = 0;
   private readonly totalImages = 5;
+  private readonly duckFrameCount = 4;
+  private readonly duckFrameDuration = 120;
 
   // Audio
-  private audioCtx: AudioContext | null = null;
+  //private shotAudio = new Audio('assets/shotgun.wav');
+  private shotAudio = new Audio('assets/shotgun.wav');
+  private audioUnlocked = false;
+  private shotAudioPool: HTMLAudioElement[] = [];
+  private shotAudioIndex = 0;
+  private audioContext: AudioContext | null = null;
+  private shotBuffer: AudioBuffer | null = null;
+  private shotBufferPromise: Promise<void> | null = null;
 
   constructor(
     private gameService: GameService,
@@ -42,8 +54,11 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.sub = this.gameService.gameState$.subscribe(state => {
       this.gameState = state;
-      if (state.gameOver) {
-        setTimeout(() => this.gameEnd.emit(), 900);
+      if (state.gameOver && !this.gameEndEmitted) {
+        this.gameEndEmitted = true;
+        this.gameEndTimeoutId = window.setTimeout(() => {
+          this.ngZone.run(() => this.gameEnd.emit());
+        }, 900);
       }
     });
   }
@@ -52,7 +67,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     const canvas = this.canvasRef.nativeElement;
     this.ctx = canvas.getContext('2d')!;
     this.resizeCanvas();
-    window.addEventListener('resize', () => this.resizeCanvas());
+    window.addEventListener('resize', this.resizeHandler);
 
     this.loadImages().then(() => {
       this.ngZone.runOutsideAngular(() => {
@@ -60,12 +75,14 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
         this.renderLoop();
       });
     });
+    this.preloadShotSound();
   }
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
     if (this.renderFrameId) cancelAnimationFrame(this.renderFrameId);
-    window.removeEventListener('resize', () => this.resizeCanvas());
+    if (this.gameEndTimeoutId) window.clearTimeout(this.gameEndTimeoutId);
+    window.removeEventListener('resize', this.resizeHandler);
   }
 
   private resizeCanvas(): void {
@@ -85,7 +102,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
 
       ['normal', 'fast', 'golden'].forEach(t => {
         const img = new Image();
-        img.src = `assets/duck_${t}.png`;
+        img.src = `assets/duck_${t}_sheet.png`;
         img.onload = done; img.onerror = done;
         this.duckImgs[t] = img;
       });
@@ -152,7 +169,21 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     }
 
     if (img && img.complete && img.naturalWidth > 0) {
-      ctx.drawImage(img, -duck.width / 2, -duck.height / 2, duck.width, duck.height);
+      const frameWidth = img.naturalWidth / this.duckFrameCount;
+      const frameHeight = img.naturalHeight;
+      const frameIndex = Math.floor((performance.now() - duck.spawnTime) / this.duckFrameDuration) % this.duckFrameCount;
+
+      ctx.drawImage(
+        img,
+        frameIndex * frameWidth,
+        0,
+        frameWidth,
+        frameHeight,
+        -duck.width / 2,
+        -duck.height / 2,
+        duck.width,
+        duck.height
+      );
     } else {
       // Fallback colored rectangle with type indicator
       const colors: Record<string, string> = { normal: '#8B4513', fast: '#1E90FF', golden: '#FFD700' };
@@ -199,6 +230,32 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
   private drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number): void {
     if (!this.gameState) return;
     const t = this.gameState.timeLeft;
+    const compact = w < 560 || h < 360;
+    const top = compact ? 8 : 12;
+    const gap = compact ? 6 : 10;
+    const pillHeight = compact ? 34 : 42;
+    const fontSize = compact ? 15 : 18;
+    const timerFontSize = compact ? 18 : 22;
+
+    ctx.save();
+    ctx.textBaseline = 'middle';
+
+    ctx.font = `bold ${fontSize}px Arial`;
+    const scoreText = `${this.translate('score')}: ${this.gameState.score}`;
+    const hitText = `${this.gameState.hits}/${this.gameState.misses}`;
+    const scoreWidth = Math.min(Math.max(ctx.measureText(scoreText).width + 24, 96), w * 0.34);
+    const hitWidth = compact ? 70 : 88;
+
+    const timerText = `${t}s`;
+    ctx.font = `900 ${timerFontSize}px Arial`;
+    const timerWidth = Math.min(Math.max(ctx.measureText(timerText).width + 34, compact ? 74 : 92), w * 0.28);
+
+    this.drawHudPill(ctx, gap, top, scoreWidth, pillHeight, 'rgba(0, 0, 0, 0.38)', scoreText, '#FFD45A', fontSize);
+    this.drawHudPill(ctx, (w - timerWidth) / 2, top, timerWidth, pillHeight, t <= 10 ? 'rgba(90, 0, 0, 0.62)' : 'rgba(0, 0, 0, 0.42)', timerText, t <= 10 ? '#FFEC5C' : '#FFFFFF', timerFontSize);
+    this.drawHudPill(ctx, w - hitWidth - gap, top, hitWidth, pillHeight, 'rgba(0, 0, 0, 0.38)', hitText, '#FFFFFF', fontSize);
+
+    ctx.restore();
+    return;
 
     // Top HUD bar
     ctx.save();
@@ -213,7 +270,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.font = 'bold 24px Arial';
     ctx.fillStyle = '#FFD700';
     ctx.textAlign = 'left';
-    ctx.fillText(`🎯 ${this.gameState.score}`, 22, 41);
+    ctx.fillText(`🎯 ${this.gameState!.score}`, 22, 41);
 
     // Timer (center)
     ctx.textAlign = 'center';
@@ -230,12 +287,45 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.font = 'bold 20px Arial';
     ctx.fillStyle = '#FFFFFF';
     ctx.textAlign = 'right';
-    ctx.fillText(`✅ ${this.gameState.hits}  ❌ ${this.gameState.misses}`, w - 22, 41);
+    ctx.fillText(`✅ ${this.gameState!.hits}  ❌ ${this.gameState!.misses}`, w - 22, 41);
 
     ctx.restore();
   }
 
+  private drawHudPill(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    background: string,
+    text: string,
+    color: string,
+    fontSize: number
+  ): void {
+    ctx.save();
+    ctx.fillStyle = background;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, height / 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.font = `900 ${fontSize}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.48)';
+    ctx.fillStyle = color;
+    ctx.strokeText(text, x + width / 2, y + height / 2);
+    ctx.fillText(text, x + width / 2, y + height / 2);
+    ctx.restore();
+  }
+
   onCanvasClick(event: MouseEvent | TouchEvent): void {
+    //event.preventDefault();
+    this.unlockAudio();
     event.preventDefault();
     const canvas = this.canvasRef.nativeElement;
     const rect = canvas.getBoundingClientRect();
@@ -257,48 +347,128 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.ngZone.run(() => {
       const pts = this.gameService.shoot(canvasX, canvasY);
-      if (pts > 0) this.playHitSound(pts);
-      else this.playMissSound();
+      this.playShotSound();
     });
   }
 
-  private getAudioCtx(): AudioContext {
-    if (!this.audioCtx) {
-      this.audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  private playShotSound(): void {
+    if (this.shotBuffer) {
+      try {
+        const context = this.getAudioContext();
+        if (!context) {
+          this.playHtmlShotSound();
+          return;
+        }
+
+        if (context.state === 'running') {
+          this.playBufferedShotSound(context);
+          return;
+        }
+
+        context.resume()
+          .then(() => this.playBufferedShotSound(context))
+          .catch(() => this.playHtmlShotSound());
+        return;
+      } catch {
+        this.playHtmlShotSound();
+        return;
+      }
     }
-    return this.audioCtx;
+
+    this.playHtmlShotSound();
   }
 
-  private playHitSound(pts: number): void {
+  private playBufferedShotSound(context: AudioContext): void {
+    if (!this.shotBuffer) return;
+
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = this.shotBuffer;
+    gain.gain.value = 0.75;
+    source.connect(gain);
+    gain.connect(context.destination);
+    source.start();
+  }
+
+  private playHtmlShotSound(): void {
     try {
-      const ac = this.getAudioCtx();
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.connect(gain); gain.connect(ac.destination);
-      osc.frequency.setValueAtTime(pts >= 50 ? 880 : pts >= 25 ? 660 : 440, ac.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(pts >= 50 ? 1760 : 880, ac.currentTime + 0.18);
-      gain.gain.setValueAtTime(0.3, ac.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35);
-      osc.start(); osc.stop(ac.currentTime + 0.35);
+      const shot = this.shotAudioPool[this.shotAudioIndex] || this.shotAudio;
+      this.shotAudioIndex = (this.shotAudioIndex + 1) % Math.max(this.shotAudioPool.length, 1);
+      shot.volume = 0.75;
+      shot.currentTime = 0;
+      shot.play().catch(() => {});
     } catch { /* ignore */ }
   }
 
-  private playMissSound(): void {
-    try {
-      const ac = this.getAudioCtx();
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      osc.type = 'sawtooth';
-      osc.connect(gain); gain.connect(ac.destination);
-      osc.frequency.setValueAtTime(220, ac.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(80, ac.currentTime + 0.18);
-      gain.gain.setValueAtTime(0.15, ac.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.22);
-      osc.start(); osc.stop(ac.currentTime + 0.22);
-    } catch { /* ignore */ }
+  private preloadShotSound(): void {
+    this.shotAudio.preload = 'auto';
+    this.shotAudio.volume = 0.75;
+    this.shotAudio.load();
+    this.shotAudioPool = Array.from({ length: 4 }, () => {
+      const audio = new Audio('assets/shotgun.wav');
+      audio.preload = 'auto';
+      audio.volume = 0.75;
+      audio.load();
+      return audio;
+    });
+
+    if (this.shotBufferPromise) return;
+
+    this.shotBufferPromise = fetch('assets/shotgun.wav')
+      .then(response => response.arrayBuffer())
+      .then(data => {
+        const context = this.getAudioContext();
+        return context?.decodeAudioData(data);
+      })
+      .then(buffer => {
+        if (buffer) this.shotBuffer = buffer;
+      })
+      .catch(() => {
+        this.shotBuffer = null;
+      });
+  }
+
+  private getAudioContext(): AudioContext | null {
+    if (this.audioContext) return this.audioContext;
+
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextCtor) return null;
+
+    this.audioContext = new AudioContextCtor();
+    return this.audioContext;
   }
 
   translate(key: string): string {
     return this.langService.translate(key);
   }
+
+  private unlockAudio(): void {
+  if (this.audioUnlocked) {
+    return;
+  }
+
+  try {
+    const context = this.getAudioContext();
+
+    if (context) {
+      void context.resume();
+    }
+
+    const audio = this.shotAudio;
+    audio.volume = 0.01;
+
+    void audio.play()
+      .then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = 0.75;
+        this.audioUnlocked = true;
+      })
+      .catch(() => {
+        audio.volume = 0.75;
+      });
+  } catch {
+    // ignore
+  }
+}
 }

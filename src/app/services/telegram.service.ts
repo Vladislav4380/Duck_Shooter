@@ -19,6 +19,14 @@ declare global {
         };
         ready: () => void;
         expand: () => void;
+        requestFullscreen?: () => void;
+        exitFullscreen?: () => void;
+        isFullscreen?: boolean;
+        isVersionAtLeast?: (version: string) => boolean;
+        setHeaderColor?: (color: string) => void;
+        setBackgroundColor?: (color: string) => void;
+        disableVerticalSwipes?: () => void;
+        openTelegramLink?: (url: string) => void;
         close: () => void;
         MainButton: {
           text: string;
@@ -44,10 +52,13 @@ declare global {
   providedIn: 'root'
 })
 export class TelegramService {
+  private readonly botUsername = 'duck_shooter_bot';
+  private readonly miniAppShortName = 'duck_shooter';
   private webApp = (window as Window).Telegram?.WebApp;
   private userId: number | null = null;
   private username: string | null = null;
   private firstName: string | null = null;
+  private fullscreenRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.initializeTelegram();
@@ -57,6 +68,10 @@ export class TelegramService {
     if (this.webApp) {
       this.webApp.ready();
       this.webApp.expand();
+      this.webApp.setHeaderColor?.('#5BC8F5');
+      this.webApp.setBackgroundColor?.('#5BC8F5');
+      this.webApp.disableVerticalSwipes?.();
+      this.enterFullscreen();
 
       const userData = this.webApp.initDataUnsafe?.user;
       if (userData) {
@@ -65,6 +80,43 @@ export class TelegramService {
         this.firstName = userData.first_name;
       }
     }
+  }
+
+  enterFullscreen(): void {
+    this.requestFullscreen();
+    this.requestLandscape();
+
+    if (!this.fullscreenRetryTimer && this.webApp?.requestFullscreen && !this.webApp.isFullscreen) {
+      this.fullscreenRetryTimer = setTimeout(() => {
+        this.fullscreenRetryTimer = null;
+        this.requestFullscreen();
+        this.requestLandscape();
+      }, 500);
+    }
+  }
+
+  private requestFullscreen(): void {
+    const webApp = this.webApp;
+    const supportsFullscreen = !!webApp?.requestFullscreen
+      && (webApp.isVersionAtLeast?.('8.0') ?? true);
+
+    if (supportsFullscreen && !webApp?.isFullscreen) {
+      try {
+        webApp.requestFullscreen?.();
+      } catch {
+        // Older Telegram clients can expose the API but reject the request.
+      }
+    }
+  }
+
+  requestLandscape(): void {
+    const orientation = screen.orientation as ScreenOrientation & {
+      lock?: (orientation: 'landscape') => Promise<void>;
+    };
+
+    orientation?.lock?.('landscape').catch(() => {
+      // Telegram, iOS, or disabled auto-rotate can reject orientation locking.
+    });
   }
 
   isRunningInTelegram(): boolean {
@@ -84,10 +136,22 @@ export class TelegramService {
   }
 
   shareResult(score: number, accuracy: number): void {
-    if (!this.webApp) return;
+    this.shareGame(`I scored ${score} points with ${accuracy}% accuracy in Duck Shooter!`);
+  }
 
-    const message = `I scored ${score} points with ${accuracy}% accuracy in Duck Shooter! 🦆🎯`;
-    this.webApp.sendData(message);
+  shareGame(text = 'Play Duck Shooter with me!'): void {
+    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(this.getMiniAppUrl())}&text=${encodeURIComponent(text)}`;
+
+    if (this.webApp?.openTelegramLink) {
+      this.webApp.openTelegramLink(shareUrl);
+      return;
+    }
+
+    window.open(shareUrl, '_blank', 'noopener');
+  }
+
+  getMiniAppUrl(): string {
+    return `https://t.me/${this.botUsername}?startapp=share`;
   }
 
   showPopup(title: string, message: string, buttons: Array<{ text: string; id: string }> = []): Promise<string> {

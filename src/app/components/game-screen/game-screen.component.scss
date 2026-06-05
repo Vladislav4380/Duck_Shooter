@@ -5,7 +5,7 @@
   height: 100%;
   overflow: hidden;
   background: #000;
-  cursor: crosshair;
+  cursor: url('/assets/crosshair.png') 32 32, crosshair;
 
   .game-canvas {
     display: block;

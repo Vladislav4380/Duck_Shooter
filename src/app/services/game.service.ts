@@ -17,7 +17,8 @@ export interface Duck {
   wobbleSpeed: number;
   wobbleAmp: number;
   spawnTime: number;
-  lifespan: number;
+  exitTurnY: number | null;
+  hasTurnedToExit: boolean;
   hit: boolean;
   hitTime: number;
   opacity: number;
@@ -52,7 +53,15 @@ export class GameService {
   readonly GAME_DURATION = 60;
   private readonly DUCK_SPAWN_INTERVAL = 900;
   private readonly MAX_DUCKS = 8;
-  private readonly DUCK_LIFESPAN = 7000;
+  private readonly MIN_DUCK_SCALE = 0.45;
+  private readonly MAX_DUCK_SCALE = 1.3;
+  private readonly MIN_SCORING_SPEED = 80;
+  private readonly MAX_SCORING_SPEED = 310;
+  private readonly BASE_POINTS: Record<DuckType, number> = {
+    normal: 10,
+    fast: 25,
+    golden: 50
+  };
 
   private duckIdCounter = 0;
   private effectIdCounter = 0;
@@ -151,17 +160,29 @@ export class GameService {
       duck.wobble += duck.wobbleSpeed * dt;
       duck.y += Math.sin(duck.wobble) * duck.wobbleAmp * dt;
 
+      this.turnTopDuckTowardExit(duck);
+
       // Face direction of travel
       duck.flipX = duck.speedX < 0;
 
-      // Expire
-      const age = now - duck.spawnTime;
-      if (age > duck.lifespan) return false;
+      // Remove only after the duck has actually flown away from the screen.
       if (duck.x < -duck.width * 2 || duck.x > this.canvasWidth + duck.width * 2) return false;
       if (duck.y < -duck.height * 3 || duck.y > this.canvasHeight + duck.height * 2) return false;
 
       return true;
     });
+  }
+
+  private turnTopDuckTowardExit(duck: Duck): void {
+    if (duck.exitTurnY === null || duck.hasTurnedToExit || duck.y < duck.exitTurnY) return;
+
+    const currentSpeed = Math.hypot(duck.speedX, duck.speedY);
+    const exitDirection = duck.x + duck.width / 2 < this.canvasWidth / 2 ? 1 : -1;
+    const exitSpeed = Math.max(currentSpeed, this.MIN_SCORING_SPEED);
+
+    duck.speedX = exitDirection * exitSpeed;
+    duck.speedY = (Math.random() - 0.5) * exitSpeed * 0.22;
+    duck.hasTurnedToExit = true;
   }
 
   private updateHitEffects(now: number): void {
@@ -195,6 +216,7 @@ export class GameService {
 
     const edge = Math.floor(Math.random() * 4);
     let x: number, y: number, speedX: number, speedY: number;
+    let exitTurnY: number | null = null;
 
     switch (edge) {
       case 0: // left → right
@@ -214,6 +236,7 @@ export class GameService {
         y = -h;
         speedX = (Math.random() - 0.5) * baseSpeed * 0.7;
         speedY = baseSpeed * 0.55;
+        exitTurnY = this.canvasHeight * (0.42 + Math.random() * 0.18);
         break;
       default: // bottom → up (rare)
         x = Math.random() * (this.canvasWidth - w);
@@ -222,6 +245,8 @@ export class GameService {
         speedY = -baseSpeed * 0.65;
         break;
     }
+
+    const points = this.calculateDuckPoints(type, scale, speedX, speedY);
 
     this.state.ducks.push({
       id: `duck_${++this.duckIdCounter}`,
@@ -233,11 +258,37 @@ export class GameService {
       wobbleSpeed: 3 + Math.random() * 2.5,
       wobbleAmp: 18 + Math.random() * 28,
       spawnTime: performance.now(),
-      lifespan: this.DUCK_LIFESPAN,
+      exitTurnY,
+      hasTurnedToExit: false,
       hit: false, hitTime: 0, opacity: 1,
-      points: type === 'normal' ? 10 : type === 'fast' ? 25 : 50,
+      points,
       scale
     });
+  }
+
+  private calculateDuckPoints(type: DuckType, scale: number, speedX: number, speedY: number): number {
+    const basePoints = this.BASE_POINTS[type];
+    const sizeDifficulty = this.clamp(
+      (this.MAX_DUCK_SCALE - scale) / (this.MAX_DUCK_SCALE - this.MIN_DUCK_SCALE),
+      0,
+      1
+    );
+    const speed = Math.hypot(speedX, speedY);
+    const speedDifficulty = this.clamp(
+      (speed - this.MIN_SCORING_SPEED) / (this.MAX_SCORING_SPEED - this.MIN_SCORING_SPEED),
+      0,
+      1
+    );
+
+    const sizeMultiplier = 0.8 + sizeDifficulty * 0.7;
+    const speedMultiplier = 0.9 + speedDifficulty * 0.5;
+    const points = basePoints * sizeMultiplier * speedMultiplier;
+
+    return Math.max(5, Math.round(points / 5) * 5);
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
   }
 
   /**

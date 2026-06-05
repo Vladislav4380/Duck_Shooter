@@ -39,16 +39,11 @@ export class ResultScreenComponent implements OnInit {
   }
 
   onPlayAgain(): void {
-    this.gameService.resetGame();
     this.playAgain.emit();
   }
 
   onShare(): void {
-    if (this.telegramService.isRunningInTelegram()) {
-      this.telegramService.shareResult(this.finalScore, this.accuracy);
-    } else {
-      alert(`Score: ${this.finalScore} | Accuracy: ${this.accuracy}%`);
-    }
+    this.telegramService.shareResult(this.finalScore, this.accuracy);
   }
 
   translate(key: string): string {

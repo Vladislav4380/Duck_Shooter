@@ -16,4 +16,11 @@
     [misses]="gameState?.misses || 0"
     (playAgain)="onPlayAgain()">
   </app-result-screen>
+
+  <div class="landscape-hint" *ngIf="showLandscapeHint">
+    <img src="assets/duck_normal.png" alt="Duck" class="landscape-duck">
+    <div class="phone-turn" aria-hidden="true"></div>
+    <h2>Поверніть телефон горизонтально</h2>
+    <p>Гра розрахована на широкий екран</p>
+  </div>
 </div>
