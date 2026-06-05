@@ -36,11 +36,13 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly duckFrameDuration = 120;
 
   // Audio
-  //private shotAudio = new Audio('assets/shotgun.wav');
-  private shotAudio = new Audio('assets/shotgun.wav');
+  private readonly shotSoundUrl = 'assets/shotgun.mp3';
+  private readonly shotSoundDuration = 0.62;
+  private shotAudio = new Audio(this.shotSoundUrl);
   private audioUnlocked = false;
   private shotAudioPool: HTMLAudioElement[] = [];
   private shotAudioIndex = 0;
+  private shotStopTimers = new WeakMap<HTMLAudioElement, number>();
   private audioContext: AudioContext | null = null;
   private shotBuffer: AudioBuffer | null = null;
   private shotBufferPromise: Promise<void> | null = null;
@@ -387,16 +389,24 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     gain.gain.value = 0.75;
     source.connect(gain);
     gain.connect(context.destination);
-    source.start();
+    source.start(0, 0, Math.min(this.shotSoundDuration, this.shotBuffer.duration));
   }
 
   private playHtmlShotSound(): void {
     try {
       const shot = this.shotAudioPool[this.shotAudioIndex] || this.shotAudio;
       this.shotAudioIndex = (this.shotAudioIndex + 1) % Math.max(this.shotAudioPool.length, 1);
+      const activeTimer = this.shotStopTimers.get(shot);
+      if (activeTimer) window.clearTimeout(activeTimer);
+
       shot.volume = 0.75;
       shot.currentTime = 0;
       shot.play().catch(() => {});
+      const stopTimer = window.setTimeout(() => {
+        shot.pause();
+        shot.currentTime = 0;
+      }, this.shotSoundDuration * 1000);
+      this.shotStopTimers.set(shot, stopTimer);
     } catch { /* ignore */ }
   }
 
@@ -405,7 +415,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     this.shotAudio.volume = 0.75;
     this.shotAudio.load();
     this.shotAudioPool = Array.from({ length: 4 }, () => {
-      const audio = new Audio('assets/shotgun.wav');
+      const audio = new Audio(this.shotSoundUrl);
       audio.preload = 'auto';
       audio.volume = 0.75;
       audio.load();
@@ -414,7 +424,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
 
     if (this.shotBufferPromise) return;
 
-    this.shotBufferPromise = fetch('assets/shotgun.wav')
+    this.shotBufferPromise = fetch(this.shotSoundUrl)
       .then(response => response.arrayBuffer())
       .then(data => {
         const context = this.getAudioContext();
