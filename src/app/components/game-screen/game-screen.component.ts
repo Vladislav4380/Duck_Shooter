@@ -31,21 +31,27 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
   private duckImgs: Record<string, HTMLImageElement> = {};
   private hitImg = new Image();
   private imagesLoaded = 0;
-  private readonly totalImages = 5;
+  private readonly totalImages = 6;
   private readonly duckFrameCount = 4;
   private readonly duckFrameDuration = 120;
 
   // Audio
   private readonly shotSoundUrl = 'assets/shotgun.mp3';
   private readonly shotSoundDuration = 0.62;
+  private readonly missSoundUrl = 'assets/animal_bird_duck_quack_003.mp3';
+  private readonly missSoundDelay = 650;
   private shotAudio = new Audio(this.shotSoundUrl);
+  private missAudio = new Audio(this.missSoundUrl);
   private audioUnlocked = false;
   private shotAudioPool: HTMLAudioElement[] = [];
   private shotAudioIndex = 0;
   private shotStopTimers = new WeakMap<HTMLAudioElement, number>();
   private audioContext: AudioContext | null = null;
   private shotBuffer: AudioBuffer | null = null;
+  private missBuffer: AudioBuffer | null = null;
   private shotBufferPromise: Promise<void> | null = null;
+  private missBufferPromise: Promise<void> | null = null;
+  private missSoundTimeoutIds: number[] = [];
 
   constructor(
     private gameService: GameService,
@@ -78,12 +84,15 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
       });
     });
     this.preloadShotSound();
+    this.preloadMissSound();
   }
 
   ngOnDestroy(): void {
     this.sub?.unsubscribe();
     if (this.renderFrameId) cancelAnimationFrame(this.renderFrameId);
     if (this.gameEndTimeoutId) window.clearTimeout(this.gameEndTimeoutId);
+    this.missSoundTimeoutIds.forEach(timeoutId => window.clearTimeout(timeoutId));
+    this.missSoundTimeoutIds = [];
     window.removeEventListener('resize', this.resizeHandler);
   }
 
@@ -102,7 +111,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
       this.bgImg.src = 'assets/bg_game.png';
       this.bgImg.onload = done; this.bgImg.onerror = done;
 
-      ['normal', 'fast', 'golden'].forEach(t => {
+      ['normal', 'fast', 'golden', 'frenzy'].forEach(t => {
         const img = new Image();
         img.src = `assets/duck_${t}_sheet.png`;
         img.onload = done; img.onerror = done;
@@ -156,7 +165,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.save();
     ctx.globalAlpha = duck.opacity;
 
-    const img = this.duckImgs[duck.type];
+    const img = this.duckImgs[duck.type] || this.duckImgs['normal'];
     const cx = duck.x + duck.width / 2;
     const cy = duck.y + duck.height / 2;
 
@@ -188,7 +197,7 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
       );
     } else {
       // Fallback colored rectangle with type indicator
-      const colors: Record<string, string> = { normal: '#8B4513', fast: '#1E90FF', golden: '#FFD700' };
+      const colors: Record<string, string> = { normal: '#8B4513', fast: '#1E90FF', golden: '#FFD700', frenzy: '#7C3AED' };
       ctx.fillStyle = colors[duck.type] || '#888';
       ctx.beginPath();
       ctx.ellipse(0, 0, duck.width / 2, duck.height / 2, 0, 0, Math.PI * 2);
@@ -348,8 +357,9 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     const canvasY = (clientY - rect.top) * scaleY;
 
     this.ngZone.run(() => {
-      const pts = this.gameService.shoot(canvasX, canvasY);
+      const shot = this.gameService.shoot(canvasX, canvasY);
       this.playShotSound();
+      if (!shot.hit) this.playMissSoundAfterShot();
     });
   }
 
@@ -410,6 +420,61 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
     } catch { /* ignore */ }
   }
 
+  private playMissSoundAfterShot(): void {
+    const timeoutId = window.setTimeout(() => {
+      this.missSoundTimeoutIds = this.missSoundTimeoutIds.filter(id => id !== timeoutId);
+      this.playMissSound();
+    }, this.missSoundDelay);
+    this.missSoundTimeoutIds.push(timeoutId);
+  }
+
+  private playMissSound(): void {
+    if (this.missBuffer) {
+      try {
+        const context = this.getAudioContext();
+        if (!context) {
+          this.playHtmlMissSound();
+          return;
+        }
+
+        if (context.state === 'running') {
+          this.playBufferedMissSound(context);
+          return;
+        }
+
+        context.resume()
+          .then(() => this.playBufferedMissSound(context))
+          .catch(() => this.playHtmlMissSound());
+        return;
+      } catch {
+        this.playHtmlMissSound();
+        return;
+      }
+    }
+
+    this.playHtmlMissSound();
+  }
+
+  private playBufferedMissSound(context: AudioContext): void {
+    if (!this.missBuffer) return;
+
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = this.missBuffer;
+    gain.gain.value = 1;
+    source.connect(gain);
+    gain.connect(context.destination);
+    source.start();
+  }
+
+  private playHtmlMissSound(): void {
+    try {
+      this.missAudio.volume = 1;
+      this.missAudio.currentTime = 0;
+      this.missAudio.play().catch(() => {});
+    } catch { /* ignore */ }
+  }
+
   private preloadShotSound(): void {
     this.shotAudio.preload = 'auto';
     this.shotAudio.volume = 0.75;
@@ -435,6 +500,27 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
       })
       .catch(() => {
         this.shotBuffer = null;
+      });
+  }
+
+  private preloadMissSound(): void {
+    this.missAudio.preload = 'auto';
+    this.missAudio.volume = 1;
+    this.missAudio.load();
+
+    if (this.missBufferPromise) return;
+
+    this.missBufferPromise = fetch(this.missSoundUrl)
+      .then(response => response.arrayBuffer())
+      .then(data => {
+        const context = this.getAudioContext();
+        return context?.decodeAudioData(data);
+      })
+      .then(buffer => {
+        if (buffer) this.missBuffer = buffer;
+      })
+      .catch(() => {
+        this.missBuffer = null;
       });
   }
 
@@ -472,13 +558,33 @@ export class GameScreenComponent implements OnInit, AfterViewInit, OnDestroy {
         audio.pause();
         audio.currentTime = 0;
         audio.volume = 0.75;
+        this.unlockMissAudio();
         this.audioUnlocked = true;
       })
       .catch(() => {
         audio.volume = 0.75;
+        this.unlockMissAudio();
       });
   } catch {
     // ignore
   }
 }
+
+private unlockMissAudio(): void {
+  try {
+    this.missAudio.volume = 0.01;
+    void this.missAudio.play()
+      .then(() => {
+        this.missAudio.pause();
+        this.missAudio.currentTime = 0;
+        this.missAudio.volume = 1;
+      })
+      .catch(() => {
+        this.missAudio.volume = 1;
+      });
+  } catch {
+    // ignore
+  }
+}
+
 }

@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
-export type DuckType = 'normal' | 'fast' | 'golden';
+export type DuckType = 'normal' | 'fast' | 'golden' | 'frenzy';
 
 export interface Duck {
   id: string;
@@ -42,17 +42,28 @@ export interface GameState {
   hits: number;
   misses: number;
   timeLeft: number;
+  frenzyUntil: number;
   isRunning: boolean;
   gameOver: boolean;
   ducks: Duck[];
   hitEffects: HitEffect[];
 }
 
+export interface ShootResult {
+  points: number;
+  hit: boolean;
+  hitType: DuckType | null;
+  activatedFrenzy: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class GameService {
   readonly GAME_DURATION = 60;
   private readonly DUCK_SPAWN_INTERVAL = 900;
+  private readonly FRENZY_SPAWN_INTERVAL = 90;
+  private readonly FRENZY_DURATION = 3000;
   private readonly MAX_DUCKS = 8;
+  private readonly FRENZY_MAX_DUCKS = 30;
   private readonly MIN_DUCK_SCALE = 0.45;
   private readonly MAX_DUCK_SCALE = 1.3;
   private readonly MIN_SCORING_SPEED = 80;
@@ -60,12 +71,13 @@ export class GameService {
   private readonly BASE_POINTS: Record<DuckType, number> = {
     normal: 10,
     fast: 25,
-    golden: 50
+    golden: 50,
+    frenzy: 15
   };
 
   private duckIdCounter = 0;
   private effectIdCounter = 0;
-  private spawnTimer: ReturnType<typeof setInterval> | null = null;
+  private spawnTimer: ReturnType<typeof setTimeout> | null = null;
   private gameTimer: ReturnType<typeof setInterval> | null = null;
   private animationFrameId: number | null = null;
   private lastFrameTime = 0;
@@ -83,6 +95,7 @@ export class GameService {
       hits: 0,
       misses: 0,
       timeLeft: this.GAME_DURATION,
+      frenzyUntil: 0,
       isRunning: false,
       gameOver: false,
       ducks: [],
@@ -112,11 +125,7 @@ export class GameService {
     }, 1000);
 
     // Duck spawner
-    this.spawnTimer = setInterval(() => {
-      if (this.state.isRunning && this.state.ducks.filter(d => !d.hit).length < this.MAX_DUCKS) {
-        this.spawnDuck();
-      }
-    }, this.DUCK_SPAWN_INTERVAL);
+    this.scheduleNextDuckSpawn();
 
     // Spawn first duck immediately
     setTimeout(() => this.spawnDuck(), 200);
@@ -173,6 +182,25 @@ export class GameService {
     });
   }
 
+  private scheduleNextDuckSpawn(): void {
+    if (this.spawnTimer) {
+      clearTimeout(this.spawnTimer);
+      this.spawnTimer = null;
+    }
+
+    if (!this.state.isRunning) return;
+
+    const delay = this.isFrenzyActive() ? this.FRENZY_SPAWN_INTERVAL : this.DUCK_SPAWN_INTERVAL;
+    this.spawnTimer = setTimeout(() => {
+      this.spawnTimer = null;
+      const maxDucks = this.isFrenzyActive() ? this.FRENZY_MAX_DUCKS : this.MAX_DUCKS;
+      if (this.state.isRunning && this.state.ducks.filter(d => !d.hit).length < maxDucks) {
+        this.spawnDuck();
+      }
+      this.scheduleNextDuckSpawn();
+    }, delay);
+  }
+
   private turnTopDuckTowardExit(duck: Duck): void {
     if (duck.exitTurnY === null || duck.hasTurnedToExit || duck.y < duck.exitTurnY) return;
 
@@ -198,9 +226,11 @@ export class GameService {
     if (!this.canvasWidth || !this.canvasHeight) return;
 
     const rand = Math.random();
+    const hasFrenzyDuck = this.state.ducks.some(duck => duck.type === 'frenzy' && !duck.hit);
     let type: DuckType;
-    if (rand < 0.6) type = 'normal';
-    else if (rand < 0.85) type = 'fast';
+    if (!this.isFrenzyActive() && !hasFrenzyDuck && rand < 0.08) type = 'frenzy';
+    else if (rand < 0.62) type = 'normal';
+    else if (rand < 0.87) type = 'fast';
     else type = 'golden';
 
     // Varied sizes: small ducks are harder to click, big ones easier
@@ -212,6 +242,7 @@ export class GameService {
 
     const baseSpeed = type === 'fast' ? 200 + Math.random() * 90
       : type === 'golden' ? 130 + Math.random() * 70
+      : type === 'frenzy' ? 120 + Math.random() * 85
       : 85 + Math.random() * 65;
 
     const edge = Math.floor(Math.random() * 4);
@@ -293,10 +324,10 @@ export class GameService {
 
   /**
    * Process a click/tap at canvas coordinates.
-   * Returns points scored (0 = miss).
+   * Returns the shot result.
    */
-  shoot(canvasX: number, canvasY: number): number {
-    if (!this.state.isRunning) return 0;
+  shoot(canvasX: number, canvasY: number): ShootResult {
+    if (!this.state.isRunning) return this.missResult();
 
     // Iterate in reverse so topmost duck is hit first
     for (let i = this.state.ducks.length - 1; i >= 0; i--) {
@@ -311,10 +342,15 @@ export class GameService {
       const hh = duck.height * (1 - pad * 2);
 
       if (canvasX >= hx && canvasX <= hx + hw && canvasY >= hy && canvasY <= hy + hh) {
+        const activatedFrenzy = duck.type === 'frenzy';
         duck.hit = true;
         duck.hitTime = performance.now();
         this.state.score += duck.points;
         this.state.hits++;
+        if (activatedFrenzy) {
+          this.state.frenzyUntil = performance.now() + this.FRENZY_DURATION;
+          this.scheduleNextDuckSpawn();
+        }
 
         this.state.hitEffects.push({
           id: `fx_${++this.effectIdCounter}`,
@@ -329,27 +365,45 @@ export class GameService {
 
         this.saveBestScore();
         this.emit();
-        return duck.points;
+        return {
+          points: duck.points,
+          hit: true,
+          hitType: duck.type,
+          activatedFrenzy
+        };
       }
     }
 
     // Miss
     this.state.misses++;
     this.emit();
-    return 0;
+    return this.missResult();
+  }
+
+  private missResult(): ShootResult {
+    return {
+      points: 0,
+      hit: false,
+      hitType: null,
+      activatedFrenzy: false
+    };
+  }
+
+  private isFrenzyActive(): boolean {
+    return this.state.frenzyUntil > performance.now();
   }
 
   private endGame(): void {
     this.state.isRunning = false;
     this.state.gameOver = true;
-    if (this.spawnTimer) { clearInterval(this.spawnTimer); this.spawnTimer = null; }
+    if (this.spawnTimer) { clearTimeout(this.spawnTimer); this.spawnTimer = null; }
     if (this.gameTimer) { clearInterval(this.gameTimer); this.gameTimer = null; }
     this.saveBestScore();
     this.emit();
   }
 
   private clearTimers(): void {
-    if (this.spawnTimer) { clearInterval(this.spawnTimer); this.spawnTimer = null; }
+    if (this.spawnTimer) { clearTimeout(this.spawnTimer); this.spawnTimer = null; }
     if (this.gameTimer) { clearInterval(this.gameTimer); this.gameTimer = null; }
     if (this.animationFrameId) { cancelAnimationFrame(this.animationFrameId); this.animationFrameId = null; }
   }
